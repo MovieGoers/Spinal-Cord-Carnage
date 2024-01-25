@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class PlayerScript : MonoBehaviour
 {
@@ -8,13 +9,17 @@ public class PlayerScript : MonoBehaviour
     {
         walking,
         crouching,
+        sliding,
         air
     }
 
-    public Movementstate state;
+    private Movementstate state;
+
+    public Text speedText;
 
     [Header("Movement")]
-    public float NormalSpeed;
+    public float NormalSpeed; // 플레이어 일반 속도
+
     private float moveSpeed; // 플레이어 속도
     public Rigidbody rb;
     Vector3 moveDirection; // 플레이어의 움직임 방향
@@ -43,8 +48,10 @@ public class PlayerScript : MonoBehaviour
 
     [Header("Slide")]
     public float maxSlideTime;
-    public float slideForce;
-    public float slideTimer;
+    public float slideSpeed;
+    float slideTimer;
+    public float slideYScale;
+    bool isSliding;
 
 
 
@@ -57,6 +64,7 @@ public class PlayerScript : MonoBehaviour
     }
     void Update()
     {
+        speedText.text =  rb.velocity.magnitude.ToString("#.##");
         // rotate player
         transform.rotation = Quaternion.Euler(0f, InputManager.Instance.yRotation, 0f);
 
@@ -64,9 +72,16 @@ public class PlayerScript : MonoBehaviour
         MovePlayer();
         LimitFlatVelocity();
         HandleState();
+        HandleInput();
 
+        // 경사면 위에 있을 때 중력 제거.
+        rb.useGravity = !isOnSlope();
+    }
+
+    void HandleInput()
+    {
         // jump player
-        if (Input.GetKey(InputManager.Instance.jumpKeyCode) && isReadyToJump && isGrounded)
+        if (Input.GetKeyDown(InputManager.Instance.jumpKeyCode) && isReadyToJump && isGrounded)
         {
             Jump();
             isReadyToJump = false;
@@ -85,17 +100,31 @@ public class PlayerScript : MonoBehaviour
             transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
         }
 
-        rb.useGravity = !isOnSlope();
+        //slide player
+        if (Input.GetKeyDown(InputManager.Instance.slideKeyCode) && moveDirection.magnitude > 0.001f)
+        {
+            StartSlide();
+        }
+
+        if(Input.GetKeyUp(InputManager.Instance.slideKeyCode) && isSliding)
+        {
+            EndSlide();
+        }
     }
 
     void HandleState()
     {
-        if (Input.GetKey(InputManager.Instance.crouchKeyCode))
+        if (isSliding)
+        {
+            state = Movementstate.sliding;
+            moveSpeed = slideSpeed;
+        }
+        else if (Input.GetKey(InputManager.Instance.crouchKeyCode))
         {
             state = Movementstate.crouching;
             moveSpeed = crouchSpeed;
         }
-        if (isGrounded)
+        else if (isGrounded)
         {
             state = Movementstate.walking;
             moveSpeed = NormalSpeed;
@@ -109,12 +138,13 @@ public class PlayerScript : MonoBehaviour
     // 플레이어 움직임
     void MovePlayer()
     {
+        // 플레이어가 움직이는 방향 벡터.
         moveDirection = transform.forward * InputManager.Instance.verticalInput + transform.right * InputManager.Instance.horizontalInput;
 
         // 경사면에 있는 경우,
         if (isOnSlope())
         {
-            rb.AddForce(GetSlopeMoveDirection() * moveSpeed * Time.deltaTime, ForceMode.Force);
+            rb.AddForce(GetSlopeMoveDirection(moveDirection) * moveSpeed * Time.deltaTime, ForceMode.Force);
         }
         else if (isGrounded)
             rb.AddForce(moveDirection.normalized * moveSpeed * Time.deltaTime, ForceMode.Force);
@@ -128,6 +158,11 @@ public class PlayerScript : MonoBehaviour
             rb.drag = goundDrag;
         else
             rb.drag = 0;
+
+        if (isSliding && isGrounded)
+        {
+            Slide();
+        }
     }
 
     // 플레이어의 x, z축 속도 제한
@@ -166,8 +201,44 @@ public class PlayerScript : MonoBehaviour
         return false;
     }
 
-    Vector3 GetSlopeMoveDirection()
+    Vector3 GetSlopeMoveDirection(Vector3 direction)
     {
-        return Vector3.ProjectOnPlane(moveDirection, slopeCollision[0].gameObject.transform.up).normalized;
+        return Vector3.ProjectOnPlane(direction, slopeCollision[0].gameObject.transform.up).normalized;
+    }
+
+    void StartSlide()
+    {
+        isSliding = true;
+
+        transform.localScale = new Vector3(transform.localScale.x, slideYScale, transform.localScale.z);
+        rb.AddForce(Vector3.down * crouchForce, ForceMode.Impulse);
+
+        slideTimer = maxSlideTime;
+    }
+
+    void Slide()
+    {
+        // 평면 또는 위로 향하는 방향일 경우,
+        if(!isOnSlope() || rb.velocity.y > -0.1f)
+        {
+            rb.AddForce(moveDirection.normalized * slideSpeed * Time.deltaTime, ForceMode.Force);
+
+            slideTimer -= Time.deltaTime;
+        }
+        else
+        {
+            // 경사면일 경우, 경사면에서의 방향 벡터를 가지고 슬라이딩 사용.
+            rb.AddForce(GetSlopeMoveDirection(moveDirection).normalized * slideSpeed * Time.deltaTime, ForceMode.Force);
+        }
+
+        if (slideTimer <= 0)
+            EndSlide();
+    }
+
+    void EndSlide()
+    {
+        isSliding = false;
+
+        transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
     }
 }
