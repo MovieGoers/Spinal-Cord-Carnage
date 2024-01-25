@@ -5,12 +5,17 @@ using UnityEngine;
 public class InputManager : MonoBehaviour
 {
     private static InputManager instance;
-
-    public float mouseZ;
     public static InputManager Instance
     {
         get { return instance; }
     }
+
+    public float sensX, sensY;
+
+    [HideInInspector]
+    public float mouseX, mouseY;
+    public float xRotation, yRotation;
+
     private void Awake()
     {
         if (instance)
@@ -23,9 +28,30 @@ public class InputManager : MonoBehaviour
         DontDestroyOnLoad(this.gameObject);
     }
 
+    private void Start()
+    {
+        LockCursor();
+    }
+
+    private void Update()
+    {
+        mouseX = Input.GetAxisRaw("Mouse X") * Time.deltaTime * sensX;
+        mouseY = Input.GetAxisRaw("Mouse Y") * Time.deltaTime * sensY;
+
+        xRotation -= mouseY;
+        yRotation += mouseX;
+        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
+    }
+
     public void LockCursor()
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    public void UnlockCursor()
+    {
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 }
