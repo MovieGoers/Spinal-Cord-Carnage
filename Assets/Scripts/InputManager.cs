@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class InputManager : MonoBehaviour
 {
+
     private static InputManager instance;
     public static InputManager Instance
     {
@@ -14,7 +15,15 @@ public class InputManager : MonoBehaviour
 
     [HideInInspector]
     public float mouseX, mouseY;
+
+    [HideInInspector]
     public float xRotation, yRotation;
+
+    [HideInInspector]
+    public float horizontalInput, verticalInput;
+
+    [Header("Keybinds")]
+    public KeyCode jumpKeyCode;
 
     private void Awake()
     {
@@ -30,6 +39,7 @@ public class InputManager : MonoBehaviour
 
     private void Start()
     {
+        jumpKeyCode = KeyCode.Space;
         LockCursor();
     }
 
@@ -37,6 +47,9 @@ public class InputManager : MonoBehaviour
     {
         mouseX = Input.GetAxisRaw("Mouse X") * Time.deltaTime * sensX;
         mouseY = Input.GetAxisRaw("Mouse Y") * Time.deltaTime * sensY;
+
+        horizontalInput = Input.GetAxisRaw("Horizontal");
+        verticalInput = Input.GetAxisRaw("Vertical");
 
         xRotation -= mouseY;
         yRotation += mouseX;
