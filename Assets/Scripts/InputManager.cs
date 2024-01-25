@@ -24,6 +24,8 @@ public class InputManager : MonoBehaviour
 
     [Header("Keybinds")]
     public KeyCode jumpKeyCode;
+    public KeyCode crouchKeyCode;
+    public KeyCode slideKeyCode;
 
     private void Awake()
     {
@@ -40,6 +42,8 @@ public class InputManager : MonoBehaviour
     private void Start()
     {
         jumpKeyCode = KeyCode.Space;
+        crouchKeyCode = KeyCode.C;
+        slideKeyCode = KeyCode.LeftControl;
         LockCursor();
     }
 
