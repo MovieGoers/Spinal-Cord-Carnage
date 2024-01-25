@@ -22,4 +22,10 @@ public class InputManager : MonoBehaviour
         instance = this;
         DontDestroyOnLoad(this.gameObject);
     }
+
+    public void LockCursor()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
 }
