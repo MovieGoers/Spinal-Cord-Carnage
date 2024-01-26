@@ -10,6 +10,7 @@ public class PlayerScript : MonoBehaviour
         walking,
         crouching,
         sliding,
+        wallRunning,
         air
     }
 
@@ -24,6 +25,7 @@ public class PlayerScript : MonoBehaviour
     public Rigidbody rb;
     Vector3 moveDirection; // 플레이어의 움직임 방향
 
+    [Header("Jump")]
     public float jumpForce; // 점프 힘
     public float jumpCooldown; // 점프 사이의 간격
     public float airMultiplier; // 공중에 떠있을 때 플레이어 속도에 곱해지는 값.
@@ -46,7 +48,7 @@ public class PlayerScript : MonoBehaviour
     public float maxSlopeAngle;
     Collider[] slopeCollision;
 
-    [Header("HandleSlide")]
+    [Header("Slide")]
     public float slideCooldown; // 슬라이딩 쿨다운
     public float maxSlideTime; // 슬라이딩 최대 시간
     public float slideSpeed; // 슬라이딩 시 속도
@@ -55,6 +57,23 @@ public class PlayerScript : MonoBehaviour
     public float slideYScale; // 슬라이드 시 y축 크기
     bool isSliding; 
     bool isReadyToSlide;
+
+    [Header("WallRunning")]
+    public LayerMask whatIsWall;
+    public float wallRunSpeed;
+    public float wallCheckDistance;
+    public float wallJumpUpForce;
+    public float wallJumpSideForce;
+    public float wallExitTime;
+    float wallExitTimer;
+    RaycastHit leftWallHit;
+    RaycastHit rightWallHit;
+    bool wallLeft;
+    bool wallRight;
+    bool isWallRunning;
+    bool isExitingWall;
+    Vector3 wallRunningVector;
+    Vector3 wallNormalVector;
 
     private void Start()
     {
@@ -69,13 +88,43 @@ public class PlayerScript : MonoBehaviour
         // rotate player
         transform.rotation = Quaternion.Euler(0f, InputManager.Instance.yRotation, 0f);
 
+
+        // 플레이어가 땅에 닿아있는지 확인.
+        isGrounded = CheckIfGrounded();
+
+        if (isGrounded || isWallRunning)
+            rb.drag = goundDrag; // 지형에 있는 경우 Drag 추가.
+        else
+            rb.drag = 0;
+
+        CheckForWall();
+
         HandleInput();
         ChangeStateAndSpeed();
         AddForceToPlayer();
         LimitFlatVelocity();
 
+
+        if (isSliding && isGrounded)
+        {
+            HandleSlide();
+        }
+
+        if(isWallRunning && !isGrounded)
+        {
+            HandleWallRunning();
+        }
+
         // 경사면 위에 있을 때 중력 제거.
         rb.useGravity = !isOnSlope();
+
+        // 벽 타기 시 중력 제거
+        rb.useGravity = !isWallRunning;
+    }
+
+    bool CheckIfGrounded()
+    {
+        return Physics.CheckSphere(groundChecker.transform.position, groundCheckDistance, whatIsGround);
     }
 
     // 플레이어 Input 처리 및 세팅 초기값 설정.
@@ -101,6 +150,7 @@ public class PlayerScript : MonoBehaviour
             transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
         }
 
+        // slide Player
         if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode) && moveDirection.magnitude > 0.01f && isReadyToSlide && isGrounded)
         {
             StartSlide();
@@ -112,12 +162,41 @@ public class PlayerScript : MonoBehaviour
         {
             EndSlide();
         }
+
+        // WallRun Player
+        if((wallLeft || wallRight) && !isGrounded && !isWallRunning && !isExitingWall) //  InputManager.Instance.verticalInput > 0 조건문 미포함
+        {
+            StartWallRunning();
+        }
+
+        if (isExitingWall)
+        {
+            if (isWallRunning)
+                EndWallRunning();
+
+            if (wallExitTimer > 0)
+                wallExitTimer -= Time.deltaTime;
+
+            if (wallExitTimer <= 0)
+                isExitingWall = false;
+        }
+
+        if(Input.GetKeyDown(InputManager.Instance.jumpKeyCode) && isWallRunning)
+        {
+            EndWallRunning();
+            WallJump();
+        }
     }
 
     // state, 그리고 속력 변경.
     void ChangeStateAndSpeed()
     {
-        if (isSliding)
+        if (isWallRunning)
+        {
+            state = Movementstate.wallRunning;
+            moveSpeed = wallRunSpeed;
+        }
+        else if (isSliding)
         {
             state = Movementstate.sliding;
             if (!isOnSlope() || rb.velocity.y > -0.1f)
@@ -149,8 +228,12 @@ public class PlayerScript : MonoBehaviour
         // 플레이어가 움직이는 방향 벡터.
         moveDirection = transform.forward * InputManager.Instance.verticalInput + transform.right * InputManager.Instance.horizontalInput;
 
-        
-        if (isOnSlope())
+        if (isWallRunning)
+        {
+            // 벽 타기를 하는 경우,
+            rb.AddForce(wallRunningVector.normalized * moveSpeed * Time.deltaTime, ForceMode.Force);
+        }
+        else if (isOnSlope())
         {
             // 경사면에 있는 경우,
             rb.AddForce(GetSlopeMoveDirection(moveDirection) * moveSpeed * Time.deltaTime, ForceMode.Force);
@@ -164,19 +247,6 @@ public class PlayerScript : MonoBehaviour
         {
             // 공중에 떠 있는 경우,
             rb.AddForce(moveDirection.normalized * moveSpeed * airMultiplier * Time.deltaTime, ForceMode.Force);
-        }
-
-        // 플레이어가 땅에 닿아있는지 확인.
-        isGrounded = Physics.CheckSphere(groundChecker.transform.position, groundCheckDistance, whatIsGround);
-
-        if (isGrounded)
-            rb.drag = goundDrag; // 지형에 있는 경우 Drag 추가.
-        else
-            rb.drag = 0;
-
-        if (isSliding && isGrounded)
-        {
-            HandleSlide();
         }
     }
 
@@ -252,5 +322,46 @@ public class PlayerScript : MonoBehaviour
     void ResetSlide()
     {
         isReadyToSlide = true;
+    }
+
+    void CheckForWall()
+    {
+        wallRight = Physics.Raycast(transform.position, transform.right, out rightWallHit, wallCheckDistance, whatIsWall);
+        wallLeft = Physics.Raycast(transform.position, -transform.right, out leftWallHit, wallCheckDistance, whatIsWall);
+    }
+
+    void StartWallRunning()
+    {
+        isWallRunning = true;
+    }
+
+    void HandleWallRunning()
+    {
+        if (wallRight)
+            wallNormalVector = rightWallHit.normal;
+        else
+            wallNormalVector = leftWallHit.normal;
+
+        wallRunningVector = Vector3.Cross(wallNormalVector, transform.up);
+
+        if ((transform.forward - wallRunningVector.normalized).magnitude > 1)
+        {
+            wallRunningVector *= -1;
+        }
+    }
+
+    void EndWallRunning()
+    {
+        isWallRunning = false;
+    }
+
+    void WallJump()
+    {
+        isExitingWall = true;
+        wallExitTimer = wallExitTime;
+        Vector3 wallJumpForce = transform.up * wallJumpUpForce + wallNormalVector * wallJumpSideForce;
+
+        rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+        rb.AddForce(wallJumpForce, ForceMode.Impulse);
     }
 }
