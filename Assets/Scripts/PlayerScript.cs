@@ -151,7 +151,7 @@ public class PlayerScript : MonoBehaviour
         }
 
         // slide Player
-        if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode) && moveDirection.magnitude > 0.01f && isReadyToSlide && isGrounded)
+        if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode) && moveDirection.magnitude > 0.01f && isReadyToSlide)
         {
             StartSlide();
             isReadyToSlide = false;
@@ -164,9 +164,15 @@ public class PlayerScript : MonoBehaviour
         }
 
         // WallRun Player
-        if((wallLeft || wallRight) && !isGrounded && !isWallRunning && !isExitingWall) //  InputManager.Instance.verticalInput > 0 조건문 미포함
+        if((wallLeft || wallRight) && !isGrounded && !isExitingWall) //  InputManager.Instance.verticalInput > 0 조건문 미포함
         {
-            StartWallRunning();
+            if(!isWallRunning)
+                StartWallRunning();
+        }
+        else
+        {
+            if (isWallRunning)
+                EndWallRunning();
         }
 
         if (isExitingWall)
@@ -343,7 +349,7 @@ public class PlayerScript : MonoBehaviour
             wallNormalVector = leftWallHit.normal;
 
         wallRunningVector = Vector3.Cross(wallNormalVector, transform.up);
-
+        
         if ((transform.forward - wallRunningVector.normalized).magnitude > 1)
         {
             wallRunningVector *= -1;
@@ -353,6 +359,8 @@ public class PlayerScript : MonoBehaviour
     void EndWallRunning()
     {
         isWallRunning = false;
+        isExitingWall = true;
+        wallExitTimer = wallExitTime;
     }
 
     void WallJump()
