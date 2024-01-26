@@ -31,7 +31,7 @@ public class PlayerScript : MonoBehaviour
 
     [Header("Ground Check")]
     public GameObject groundChecker; // 땅에 닿았는지 확인하기 위한 오브젝트
-    public float groundCheckDistance; // 땅과의 거리
+    public float groundCheckDistance; // GroundChecker와의 거리
     bool isGrounded;
     public LayerMask whatIsGround;
     public float goundDrag; // 땅에 닿았을 때 플레이어 감속값
@@ -49,14 +49,10 @@ public class PlayerScript : MonoBehaviour
     [Header("Slide")]
     public float maxSlideTime;
     public float slideSpeed;
+    public float slopeSlideMultiplier;
     float slideTimer;
     public float slideYScale;
     bool isSliding;
-
-
-
-
-
     private void Start()
     {
         isReadyToJump = true;
@@ -65,19 +61,20 @@ public class PlayerScript : MonoBehaviour
     void Update()
     {
         speedText.text =  rb.velocity.magnitude.ToString("#.##");
+
         // rotate player
         transform.rotation = Quaternion.Euler(0f, InputManager.Instance.yRotation, 0f);
 
-        // move player
+        HandleInput();
+        HandleState();
         MovePlayer();
         LimitFlatVelocity();
-        HandleState();
-        HandleInput();
 
         // 경사면 위에 있을 때 중력 제거.
         rb.useGravity = !isOnSlope();
     }
 
+    // 플레이어 Input 처리 및 세팅 초기값 설정.
     void HandleInput()
     {
         // jump player
@@ -100,25 +97,28 @@ public class PlayerScript : MonoBehaviour
             transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
         }
 
-        //slide player
-        if (Input.GetKeyDown(InputManager.Instance.slideKeyCode) && moveDirection.magnitude > 0.001f)
+        if (Input.GetKeyDown(InputManager.Instance.slideKeyCode) && moveDirection.magnitude > 0.01f)
         {
             StartSlide();
         }
 
-        if(Input.GetKeyUp(InputManager.Instance.slideKeyCode) && isSliding)
+        if (Input.GetKeyUp(InputManager.Instance.slideKeyCode))
         {
             EndSlide();
         }
     }
 
+    // state, 그리고 속력 변경.
     void HandleState()
     {
+        Debug.Log(state);
+
         if (isSliding)
         {
             state = Movementstate.sliding;
             moveSpeed = slideSpeed;
         }
+        
         else if (Input.GetKey(InputManager.Instance.crouchKeyCode))
         {
             state = Movementstate.crouching;
@@ -141,21 +141,28 @@ public class PlayerScript : MonoBehaviour
         // 플레이어가 움직이는 방향 벡터.
         moveDirection = transform.forward * InputManager.Instance.verticalInput + transform.right * InputManager.Instance.horizontalInput;
 
-        // 경사면에 있는 경우,
+        
         if (isOnSlope())
         {
+            // 경사면에 있는 경우,
             rb.AddForce(GetSlopeMoveDirection(moveDirection) * moveSpeed * Time.deltaTime, ForceMode.Force);
         }
         else if (isGrounded)
+        {
+            // 평지에 있는 경우,
             rb.AddForce(moveDirection.normalized * moveSpeed * Time.deltaTime, ForceMode.Force);
+        }
         else
+        {
+            // 공중에 떠 있는 경우,
             rb.AddForce(moveDirection.normalized * moveSpeed * airMultiplier * Time.deltaTime, ForceMode.Force);
+        }
 
         // 플레이어가 땅에 닿아있는지 확인.
         isGrounded = Physics.CheckSphere(groundChecker.transform.position, groundCheckDistance, whatIsGround);
 
         if (isGrounded)
-            rb.drag = goundDrag;
+            rb.drag = goundDrag; // 지형에 있는 경우 Drag 추가.
         else
             rb.drag = 0;
 
@@ -228,7 +235,7 @@ public class PlayerScript : MonoBehaviour
         else
         {
             // 경사면일 경우, 경사면에서의 방향 벡터를 가지고 슬라이딩 사용.
-            rb.AddForce(GetSlopeMoveDirection(moveDirection).normalized * slideSpeed * Time.deltaTime, ForceMode.Force);
+            rb.AddForce(GetSlopeMoveDirection(moveDirection).normalized * slideSpeed * slopeSlideMultiplier * Time.deltaTime, ForceMode.Force);
         }
 
         if (slideTimer <= 0)
@@ -239,6 +246,7 @@ public class PlayerScript : MonoBehaviour
     {
         isSliding = false;
 
-        transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
+        if(!Input.GetKey(InputManager.Instance.crouchKeyCode))
+            transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
     }
 }

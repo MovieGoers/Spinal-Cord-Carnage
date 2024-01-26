@@ -41,9 +41,6 @@ public class InputManager : MonoBehaviour
 
     private void Start()
     {
-        jumpKeyCode = KeyCode.Space;
-        crouchKeyCode = KeyCode.C;
-        slideKeyCode = KeyCode.LeftControl;
         LockCursor();
     }
 
