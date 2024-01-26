@@ -46,16 +46,20 @@ public class PlayerScript : MonoBehaviour
     public float maxSlopeAngle;
     Collider[] slopeCollision;
 
-    [Header("Slide")]
-    public float maxSlideTime;
-    public float slideSpeed;
-    public float slopeSlideMultiplier;
+    [Header("HandleSlide")]
+    public float slideCooldown; // 슬라이딩 쿨다운
+    public float maxSlideTime; // 슬라이딩 최대 시간
+    public float slideSpeed; // 슬라이딩 시 속도
+    public float slopeSlideMultiplier; // 경사면에서의 슬라이딩에 곱해지는 값
     float slideTimer;
-    public float slideYScale;
-    bool isSliding;
+    public float slideYScale; // 슬라이드 시 y축 크기
+    bool isSliding; 
+    bool isReadyToSlide;
+
     private void Start()
     {
         isReadyToJump = true;
+        isReadyToSlide = true;
         normalYScale = transform.localScale.y;
     }
     void Update()
@@ -66,8 +70,8 @@ public class PlayerScript : MonoBehaviour
         transform.rotation = Quaternion.Euler(0f, InputManager.Instance.yRotation, 0f);
 
         HandleInput();
-        HandleState();
-        MovePlayer();
+        ChangeStateAndSpeed();
+        AddForceToPlayer();
         LimitFlatVelocity();
 
         // 경사면 위에 있을 때 중력 제거.
@@ -86,7 +90,7 @@ public class PlayerScript : MonoBehaviour
         }
 
         // crouch player
-        if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode))
+        if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode) && isGrounded)
         {
             transform.localScale = new Vector3(transform.localScale.x, crouchYScale, transform.localScale.z);
             rb.AddForce(Vector3.down * crouchForce, ForceMode.Impulse);
@@ -97,26 +101,30 @@ public class PlayerScript : MonoBehaviour
             transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
         }
 
-        if (Input.GetKeyDown(InputManager.Instance.slideKeyCode) && moveDirection.magnitude > 0.01f)
+        if (Input.GetKeyDown(InputManager.Instance.crouchKeyCode) && moveDirection.magnitude > 0.01f && isReadyToSlide && isGrounded)
         {
             StartSlide();
+            isReadyToSlide = false;
+            Invoke(nameof(ResetSlide), slideCooldown);
         }
 
-        if (Input.GetKeyUp(InputManager.Instance.slideKeyCode))
+        if (Input.GetKeyUp(InputManager.Instance.crouchKeyCode) && isSliding)
         {
             EndSlide();
         }
     }
 
     // state, 그리고 속력 변경.
-    void HandleState()
+    void ChangeStateAndSpeed()
     {
-        Debug.Log(state);
-
         if (isSliding)
         {
             state = Movementstate.sliding;
-            moveSpeed = slideSpeed;
+            if (!isOnSlope() || rb.velocity.y > -0.1f)
+                moveSpeed = slideSpeed;
+            else
+                moveSpeed = slideSpeed * slopeSlideMultiplier;
+            
         }
         
         else if (Input.GetKey(InputManager.Instance.crouchKeyCode))
@@ -136,7 +144,7 @@ public class PlayerScript : MonoBehaviour
     }
 
     // 플레이어 움직임
-    void MovePlayer()
+    void AddForceToPlayer()
     {
         // 플레이어가 움직이는 방향 벡터.
         moveDirection = transform.forward * InputManager.Instance.verticalInput + transform.right * InputManager.Instance.horizontalInput;
@@ -168,7 +176,7 @@ public class PlayerScript : MonoBehaviour
 
         if (isSliding && isGrounded)
         {
-            Slide();
+            HandleSlide();
         }
     }
 
@@ -223,20 +231,11 @@ public class PlayerScript : MonoBehaviour
         slideTimer = maxSlideTime;
     }
 
-    void Slide()
+    void HandleSlide()
     {
         // 평면 또는 위로 향하는 방향일 경우,
         if(!isOnSlope() || rb.velocity.y > -0.1f)
-        {
-            rb.AddForce(moveDirection.normalized * slideSpeed * Time.deltaTime, ForceMode.Force);
-
             slideTimer -= Time.deltaTime;
-        }
-        else
-        {
-            // 경사면일 경우, 경사면에서의 방향 벡터를 가지고 슬라이딩 사용.
-            rb.AddForce(GetSlopeMoveDirection(moveDirection).normalized * slideSpeed * slopeSlideMultiplier * Time.deltaTime, ForceMode.Force);
-        }
 
         if (slideTimer <= 0)
             EndSlide();
@@ -248,5 +247,10 @@ public class PlayerScript : MonoBehaviour
 
         if(!Input.GetKey(InputManager.Instance.crouchKeyCode))
             transform.localScale = new Vector3(transform.localScale.x, normalYScale, transform.localScale.z);
+    }
+
+    void ResetSlide()
+    {
+        isReadyToSlide = true;
     }
 }

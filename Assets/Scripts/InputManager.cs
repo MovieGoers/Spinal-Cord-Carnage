@@ -25,7 +25,6 @@ public class InputManager : MonoBehaviour
     [Header("Keybinds")]
     public KeyCode jumpKeyCode;
     public KeyCode crouchKeyCode;
-    public KeyCode slideKeyCode;
 
     private void Awake()
     {
